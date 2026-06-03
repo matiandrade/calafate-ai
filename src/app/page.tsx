@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
-import { useChat } from "ai/react";
+import React, { useEffect, useRef, useState } from "react";
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
 import {
   Compass,
   Send,
@@ -17,22 +18,7 @@ import {
   HelpCircle,
 } from "lucide-react";
 
-export default function Home() {
-  const {
-    messages,
-    input,
-    handleInputChange,
-    handleSubmit,
-    isLoading,
-    append,
-    setInput,
-  } = useChat({
-    api: "/api/chat",
-    initialMessages: [
-      {
-        id: "welcome",
-        role: "assistant",
-        content: `👋 **¡Hola, viajero! Bienvenido a El Calafate.** 
+const WELCOME_TEXT = `👋 **¡Hola, viajero! Bienvenido a El Calafate.** 
 
 Soy tu guía turístico inteligente. Estoy aquí para ayudarte a planificar una experiencia inolvidable en la cuna de los glaciares más imponentes del mundo.
 
@@ -43,12 +29,23 @@ Te puedo guiar sobre:
 * 🚌 **Logística:** Traslados al aeropuerto, colectivos al glaciar y viajes a El Chaltén.
 * 🌤️ **Clima y ropa:** Consejos prácticos para que el viento no te sorprenda.
 
-*Detectaré automáticamente si me hablas en **Español, Inglés o Portugués** y te responderé en tu idioma.* ¿Qué te gustaría descubrir hoy?`,
+*Detectaré automáticamente si me hablas en **Español, Inglés o Portugués** y te responderé en tu idioma.* ¿Qué te gustaría descubrir hoy?`;
+
+export default function Home() {
+  const { messages, status, sendMessage } = useChat({
+    transport: new DefaultChatTransport({ api: "/api/chat" }),
+    messages: [
+      {
+        id: "welcome",
+        role: "assistant" as const,
+        parts: [{ type: "text" as const, text: WELCOME_TEXT }],
       },
     ],
   });
 
+  const [input, setInput] = useState("");
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const isLoading = status === "submitted" || status === "streaming";
 
   // Auto-scroll to bottom of chat when new messages arrive
   useEffect(() => {
@@ -81,10 +78,14 @@ Te puedo guiar sobre:
   ];
 
   const handleQuickPromptClick = (text: string) => {
-    append({
-      role: "user",
-      content: text,
-    });
+    sendMessage({ text });
+  };
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || isLoading) return;
+    sendMessage({ text: input });
+    setInput("");
   };
 
   return (
@@ -210,18 +211,21 @@ Te puedo guiar sobre:
               <div
                 key={message.id}
                 className={`flex ${
-                  message.role === "user" ? "justify-end" : "justify-start"
+                  (message.role as string) === "user" ? "justify-end" : "justify-start"
                 }`}
               >
                 <div
                   className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                    message.role === "user"
+                    (message.role as string) === "user"
                       ? "bg-primary text-primary-foreground font-medium shadow-md shadow-primary/10 rounded-tr-none"
                       : "bg-secondary/60 text-foreground border border-border/60 rounded-tl-none whitespace-pre-line"
                   }`}
                 >
-                  {/* Handle markdown bolding and bullet list outputs easily */}
-                  {message.content}
+                  {message.parts?.map((part, i) =>
+                    part.type === "text" ? (
+                      <span key={i}>{part.text}</span>
+                    ) : null
+                  )}
                 </div>
               </div>
             ))}
@@ -239,10 +243,10 @@ Te puedo guiar sobre:
 
           {/* Chat Input Console */}
           <div className="p-4 bg-secondary/10 border-t border-border">
-            <form onSubmit={handleSubmit} className="flex gap-2 items-center">
+            <form onSubmit={handleFormSubmit} className="flex gap-2 items-center">
               <input
                 value={input}
-                onChange={handleInputChange}
+                onChange={(e) => setInput(e.target.value)}
                 placeholder="Escribí tu consulta (ej. ¿Qué llevar para el Big Ice?)..."
                 disabled={isLoading}
                 className="flex-1 bg-secondary/80 border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/80 focus:border-primary/80 transition-all disabled:opacity-50"
